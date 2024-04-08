@@ -2,6 +2,7 @@
 // http://localhost:3000/isolated/exercise/06.js
 
 import * as React from 'react'
+import warning from 'warning'
 import {Switch} from '../switch'
 
 const callAll =
@@ -28,21 +29,81 @@ function toggleReducer(state, {type, initialState}) {
   }
 }
 
+// extra credit - 3
+function useControlSwitchWarning(controlPropValue, controlPropName, componentName){
+  const isControlled = controlPropValue != null
+  const { current: wasControlled } = React.useRef(isControlled)
+  React.useEffect(()=>{
+    warning(
+      !(isControlled && !wasControlled),
+      'Changing from uncontrolled to controlled component'
+    )
+
+    warning(
+      !(!isControlled && wasControlled),
+      'Changing from controlled to uncontrolled component'
+    )
+  }, [isControlled, wasControlled])
+}
+
+function useOnChangeReadOnlyWarning(controlPropValue, controlPropName, componentName, hasOnChange, readOnly, readOnlyProp, initialValueProp, OnChangeProp){
+  const isControlled = controlPropValue != null
+  React.useEffect(()=>{ // generic warning
+    warning(!(!hasOnChange && isControlled && !readOnly), 'No OnChange prop provided to controlled component')
+  }, [hasOnChange, isControlled, readOnly])
+}
+
 function useToggle({
   initialOn = false,
   reducer = toggleReducer,
   // 🐨 add an `onChange` prop.
+  onChange,
   // 🐨 add an `on` option here
   // 💰 you can alias it to `controlledOn` to avoid "variable shadowing."
+  on: controlledOn,
+  readOnly = false,
 } = {}) {
   const {current: initialState} = React.useRef({on: initialOn})
   const [state, dispatch] = React.useReducer(reducer, initialState)
   // 🐨 determine whether on is controlled and assign that to `onIsControlled`
   // 💰 `controlledOn != null`
+  const onIsControlled = controlledOn != null
+  const on = onIsControlled ? controlledOn : state.on
+
+  // extra credit - 1
+  // const hasOnChange = !!onChange
+
+  // React.useEffect(()=>{
+  //   warning(!(!hasOnChange && onIsControlled && !readOnly), 'No OnChange prop provided to controlled component')
+  // }, [hasOnChange, onIsControlled, readOnly])
+
+
+  // extra credit - 2
+  // const { current: onWasControlled } = React.useRef(onIsControlled)
+  // React.useEffect(()=>{
+  //   warning(
+  //     !(onIsControlled && !onWasControlled),
+  //     'Changing from uncontrolled to controlled component'
+  //   )
+
+  //   warning(
+  //     !(!onIsControlled && onWasControlled),
+  //     'Changing from controlled to uncontrolled component'
+  //   )
+  // }, [onIsControlled, onWasControlled])
+
+
+  // extra credit - 4
+  if(process.env.NODE_ENV !== 'production'){
+    // eslint-disable-next-line
+    useOnChangeReadOnlyWarning(controlledOn, 'on', 'useToggle', !!onChange, readOnly, 'readOnly', 'initialOn', 'onChange')
+    // eslint-disable-next-line
+    useControlSwitchWarning(controlledOn, 'on', 'useToggle')
+  }
 
   // 🐨 Replace the next line with `const on = ...` which should be `controlledOn` if
   // `onIsControlled`, otherwise, it should be `state.on`.
-  const {on} = state
+  // const {on} = state
 
   // We want to call `onChange` any time we need to make a state change, but we
   // only want to call `dispatch` if `!onIsControlled` (otherwise we could get
@@ -69,8 +130,16 @@ function useToggle({
   // so keep that in mind when you call it! How could you avoid calling it if it's not passed?
 
   // make these call `dispatchWithOnChange` instead
-  const toggle = () => dispatch({type: actionTypes.toggle})
-  const reset = () => dispatch({type: actionTypes.reset, initialState})
+
+  function dispatchWithOnchange(action){
+    if(!onIsControlled){
+      dispatch(action)
+    } 
+    onChange?.(reducer({...state, on}, action), action)
+  }
+
+  const toggle = () => dispatchWithOnchange({type: actionTypes.toggle})
+  const reset = () => dispatchWithOnchange({type: actionTypes.reset, initialState})
 
   function getTogglerProps({onClick, ...props} = {}) {
     return {
@@ -96,12 +165,13 @@ function useToggle({
   }
 }
 
-function Toggle({on: controlledOn, onChange, initialOn, reducer}) {
+function Toggle({on: controlledOn, onChange, initialOn, reducer, readOnly}) {
   const {on, getTogglerProps} = useToggle({
     on: controlledOn,
     onChange,
     initialOn,
     reducer,
+    readOnly,
   })
   const props = getTogglerProps({on})
   return <Switch {...props} />
@@ -127,7 +197,7 @@ function App() {
   return (
     <div>
       <div>
-        <Toggle on={bothOn} onChange={handleToggleChange} />
+        <Toggle on={bothOn} readOnly={true} />
         <Toggle on={bothOn} onChange={handleToggleChange} />
       </div>
       {timesClicked > 4 ? (
